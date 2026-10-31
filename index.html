@@ -303,9 +303,24 @@ function happy(){
 
 /* ---------- input ---------- */
 function startGame(){
-  if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
-  if(AC&&AC.state==='suspended')AC.resume();
-  gen();state='play';$('menu').style.display='none';$('happy').style.display='none';
+  if(!AC){
+    try{
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+    }catch(e){
+      console.log("AudioContext not supported");
+    }
+  }
+  if(AC){
+    if(AC.state === 'suspended'){
+      AC.resume();
+    }
+    // ปลดล็อกเสียงบนมือถือทันทีเมื่อกดปุ่มเริ่มเล่น
+    tone(600, 0.08, 'square', 0.05);
+  }
+  gen();
+  state='play';
+  $('menu').style.display='none';
+  $('happy').style.display='none';
 }
 $('start').onclick=startGame;
 $('again').onclick=startGame;
