@@ -56,7 +56,8 @@ body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:'Pres
   <p>พาฟักทองไปที่ประตูสีเขียว</p>
   <p>หลบหนามที่ขึ้นลงและค้างคาวผี</p>
   <p>ปัดนิ้วบนจอ หรือกดปุ่มข้างล่าง</p>
-  <p style="font-size: 24px; color: red;">🔊 เพิ่มเสียงเพื่อเพิ่มประสบการณ์ในการเล่น</p>
+  <p>🔊 เพิ่มเสียงเพื่อเพิ่มประสบการณ์ในการเล่น</p>
+  <p id="iab" style="display:none;color:#ffb347;font-size:13px">⚠️ ถ้าไม่มีเสียง กดเมนู ⋯ แล้วเลือก เปิดในเบราว์เซอร์ (Safari/Chrome)</p>
   <button class="btn" id="start">เริ่มเล่น</button>
 </div>
 <div class="ov" id="scare"><canvas id="gh" width="32" height="32"></canvas><div id="fl"></div></div>
@@ -138,6 +139,12 @@ function tone(f,d,type='square',v=.08,f2){
   o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d);
 }
 function scream(){
+  if(window._scr){
+    try{_scr.muted=false;_scr.currentTime=0;_scr.volume=1;const p=_scr.play();if(p&&p.catch)p.catch(()=>webScream());return}catch(e){}
+  }
+  webScream();
+}
+function webScream(){
   if(!AC)return;if(AC.state!=='running')AC.resume();const a=AC,t=a.currentTime,dur=2.4;
   const comp=a.createDynamicsCompressor(),master=a.createGain();master.gain.value=1;
   const ws=a.createWaveShaper(),c=new Float32Array(256);
@@ -302,12 +309,40 @@ function happy(){
 }
 
 /* ---------- input ---------- */
+function wavUrl(pcm,sr){
+  const n=pcm.length*2,buf=new ArrayBuffer(44+n),dv=new DataView(buf);
+  const ws=(o,t)=>[...t].forEach((c,i)=>dv.setUint8(o+i,c.charCodeAt(0)));
+  ws(0,'RIFF');dv.setUint32(4,36+n,true);ws(8,'WAVEfmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true);dv.setUint32(28,sr*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);ws(36,'data');dv.setUint32(40,n,true);
+  pcm.forEach((v,i)=>dv.setInt16(44+i*2,v,true));
+  return URL.createObjectURL(new Blob([buf],{type:'audio/wav'}));
+}
+function makeScream(){
+  const sr=22050,dur=2.4,n=Math.floor(sr*dur),pcm=new Int16Array(n);
+  let p1=0,p2=0,p3=0;const saw=x=>2*(x-Math.floor(x))-1;
+  for(let i=0;i<n;i++){
+    const t=i/sr;
+    let f=t<.35?420*Math.pow(1500/420,t/.35):1500*Math.pow(900/1500,(t-.35)/(dur-.35));
+    f+=90*Math.sin(2*Math.PI*14*t);
+    p1+=f/sr;p2+=f*1.51/sr;p3+=f*2.02/sr;
+    let s=saw(p1)+(saw(p2)>0?.6:-.6)+saw(p3)*.5+(Math.random()*2-1)*.5;
+    s=Math.tanh(s*1.6);
+    const env=t<.04?t/.04:t<1.5?1:Math.max(0,1-(t-1.5)/.9);
+    pcm[i]=Math.round(s*env*32767*.95);
+  }
+  return wavUrl(pcm,sr);
+}
 function initAudio(){
   try{
     if(navigator.audioSession)navigator.audioSession.type='playback';
     if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();
     if(AC.state!=='running')AC.resume();
     const s=AC.createBufferSource();s.buffer=AC.createBuffer(1,1,22050);s.connect(AC.destination);s.start(0);
+    if(!window._scr){
+      const a=new Audio(makeScream());a.preload='auto';a.muted=true;window._scr=a;
+      const pr=a.play();
+      if(pr&&pr.then)pr.then(()=>{a.pause();a.currentTime=0;a.muted=false}).catch(()=>{a.muted=false});else a.muted=false;
+    }
     if(!window._sil){
       const n=2000,buf=new Uint8Array(44+n),dv=new DataView(buf.buffer);
       const ws=(o,t)=>[...t].forEach((c,i)=>dv.setUint8(o+i,c.charCodeAt(0)));
@@ -344,6 +379,7 @@ cv.addEventListener('touchmove',e=>{
 document.addEventListener('contextmenu',e=>e.preventDefault());
 ['pointerdown','touchend','click'].forEach(ev=>document.addEventListener(ev,()=>{if(!AC||AC.state!=='running')initAudio()},{passive:true}));
 
+if(/Instagram|FBAN|FBAV|Line\//i.test(navigator.userAgent))$('iab').style.display='block';
 gen();drawGhost();requestAnimationFrame(loop);
 </script>
 </body>
