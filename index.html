@@ -132,13 +132,13 @@ const spikeAt=(x,y)=>spikes.find(s=>s.x==x&&s.y==y);
 
 /* ---------- audio ---------- */
 function tone(f,d,type='square',v=.08,f2){
-  if(!AC)return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();
+  if(!AC)return;if(AC.state!=='running')AC.resume();const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();
   o.type=type;o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+d);
   g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);
   o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d);
 }
 function scream(){
-  if(!AC)return;const a=AC,t=a.currentTime,dur=2.4;
+  if(!AC)return;if(AC.state!=='running')AC.resume();const a=AC,t=a.currentTime,dur=2.4;
   const comp=a.createDynamicsCompressor(),master=a.createGain();master.gain.value=1;
   const ws=a.createWaveShaper(),c=new Float32Array(256);
   for(let i=0;i<256;i++){const x=i/128-1;c[i]=Math.tanh(x*6)}
@@ -302,25 +302,25 @@ function happy(){
 }
 
 /* ---------- input ---------- */
+function initAudio(){
+  try{
+    if(navigator.audioSession)navigator.audioSession.type='playback';
+    if(!AC)AC=new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state!=='running')AC.resume();
+    const s=AC.createBufferSource();s.buffer=AC.createBuffer(1,1,22050);s.connect(AC.destination);s.start(0);
+    if(!window._sil){
+      const n=2000,buf=new Uint8Array(44+n),dv=new DataView(buf.buffer);
+      const ws=(o,t)=>[...t].forEach((c,i)=>dv.setUint8(o+i,c.charCodeAt(0)));
+      ws(0,'RIFF');dv.setUint32(4,36+n,true);ws(8,'WAVEfmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);
+      dv.setUint32(24,8000,true);dv.setUint32(28,8000,true);dv.setUint16(32,1,true);dv.setUint16(34,8,true);ws(36,'data');dv.setUint32(40,n,true);buf.fill(128,44);
+      const w=new Audio(URL.createObjectURL(new Blob([buf],{type:'audio/wav'})));
+      w.loop=true;w.volume=.01;w.play().catch(()=>{});window._sil=w;
+    }
+  }catch(e){}
+}
 function startGame(){
-  if(!AC){
-    try{
-      AC = new (window.AudioContext || window.webkitAudioContext)();
-    }catch(e){
-      console.log("AudioContext not supported");
-    }
-  }
-  if(AC){
-    if(AC.state === 'suspended'){
-      AC.resume();
-    }
-    // ปลดล็อกเสียงบนมือถือทันทีเมื่อกดปุ่มเริ่มเล่น
-    tone(600, 0.08, 'square', 0.05);
-  }
-  gen();
-  state='play';
-  $('menu').style.display='none';
-  $('happy').style.display='none';
+  initAudio();
+  gen();state='play';$('menu').style.display='none';$('happy').style.display='none';
 }
 $('start').onclick=startGame;
 $('again').onclick=startGame;
@@ -342,6 +342,7 @@ cv.addEventListener('touchmove',e=>{
   }
 },{passive:false});
 document.addEventListener('contextmenu',e=>e.preventDefault());
+['pointerdown','touchend','click'].forEach(ev=>document.addEventListener(ev,()=>{if(!AC||AC.state!=='running')initAudio()},{passive:true}));
 
 gen();drawGhost();requestAnimationFrame(loop);
 </script>
